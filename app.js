@@ -59,7 +59,7 @@ async function api(path, options = {}) {
   const isForm = options.body instanceof FormData;
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
-    credentials: "same-origin",
+    credentials: "include",
     headers: isForm ? authHeaders(options.headers || {}) : authHeaders({ "content-type": "application/json", ...(options.headers || {}) }),
     body: isForm ? options.body : options.body ? JSON.stringify(options.body) : undefined
   });
