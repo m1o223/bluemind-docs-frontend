@@ -1,1 +1,1 @@
-window.BLUE_MIND_DOCS_API_URL = window.BLUE_MIND_DOCS_API_URL || "http://127.0.0.1:4000";
+window.BLUE_MIND_DOCS_API_URL = window.BLUE_MIND_DOCS_API_URL || "https://bluemind-docs-backend.vercel.app";
