@@ -1374,3 +1374,25 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   .editor-layout { grid-template-columns: 248px minmax(640px, 1fr) 280px; }
   .notebook-stage { gap: 12px; padding-left: 18px; padding-right: 18px; }
 }
+
+/* Brand identity refinements */
+.brand-link {
+  cursor: default;
+}
+
+.sidebar-brand-item {
+  gap: 12px;
+}
+
+.sidebar-brand-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+  object-fit: contain;
+  flex: 0 0 24px;
+}
+
+.sidebar-brand-item:hover .sidebar-brand-icon,
+.sidebar-brand-item.active .sidebar-brand-icon {
+  transform: translateY(-1px);
+}

@@ -287,7 +287,7 @@ function workspaceShell(content) {
 function renderWorkspaceSidebar() {
   return `<aside class="workspace-sidebar" aria-label="Workspace navigation">
     <div class="sidebar-nav">
-      <button class="sidebar-item ${state.view === "dashboard" || state.view === "welcome" ? "active" : ""}" data-action="dashboard" type="button"><span>Dashboard</span></button>
+      <button class="sidebar-item sidebar-brand-item ${state.view === "dashboard" || state.view === "welcome" ? "active" : ""}" data-action="dashboard" type="button"><img class="sidebar-brand-icon" src="/assets/bluemind-docs-logo.png" alt="" /><span>Dashboard</span></button>
       <button class="sidebar-item ${state.view === "folder" ? "active" : ""}" data-action="dashboard" type="button"><span>Folders</span></button>
       <button class="sidebar-item" data-action="dashboard" type="button"><span>Pages</span></button>
       <button class="sidebar-item" type="button"><span>Shared</span></button>
@@ -635,6 +635,34 @@ async function goBackInsideWorkspace() {
   if (state.view === "folder" || state.view === "dashboard") return showDashboard();
   return refreshWorkspace();
 }
+async function refreshCurrentWorkspaceState() {
+  if (!["dashboard", "welcome", "folder", "editor"].includes(state.view)) return;
+  const view = state.view;
+  const folderId = state.selectedFolderId;
+  const pageId = state.selectedPageId;
+  try {
+    await loadCurrentUser();
+    if (!state.user) return;
+    await loadFolders();
+    if ((view === "folder" || view === "editor") && folderId && state.folders.some((folder) => folder.id === folderId)) {
+      state.selectedFolderId = folderId;
+      await loadPages(folderId);
+      if (view === "editor" && pageId) {
+        state.selectedPageId = pageId;
+        const page = await api(`/api/pages/${pageId}`);
+        const normalizedContent = normalizeNotebookContent(page.content);
+        if (!state.activeNotebookPageId || !normalizedContent.pages.some((notebookPage) => notebookPage.id === state.activeNotebookPageId)) {
+          state.activeNotebookPageId = normalizedContent.pages[0]?.id || null;
+        }
+        const pages = currentPages().map((item) => item.id === pageId ? { ...page, content: normalizedContent } : item);
+        state.pagesByFolder.set(folderId, pages);
+      }
+    }
+    setView(view);
+  } catch (error) {
+    console.error(error);
+  }
+}
 async function refreshWorkspace() {
   await loadCurrentUser();
   if (!state.user) return setView("auth");
@@ -826,7 +854,7 @@ function escapeAttribute(value) {
   return escapeHtml(value).replace(/'/g, "&#039;");
 }
 
-els.brandButton.addEventListener("click", refreshWorkspace);
+els.brandButton.addEventListener("click", refreshCurrentWorkspaceState);
 els.headerBackButton.addEventListener("click", goBackInsideWorkspace);
 
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
