@@ -43,6 +43,13 @@ function createBlockId() {
   return crypto.randomUUID();
 }
 
+const DRAWING_TOOLS = [
+  ["arrow", "Arrow"], ["double-arrow", "Double Arrow"], ["curved-arrow", "Curved Arrow"], ["straight-line", "Straight Line"], ["curved-line", "Curved Line"],
+  ["rectangle", "Rectangle"], ["rounded-rectangle", "Rounded Rectangle"], ["circle", "Circle"], ["ellipse", "Ellipse"], ["triangle", "Triangle"], ["diamond", "Diamond"], ["pentagon", "Pentagon"], ["hexagon", "Hexagon"], ["star", "Star"], ["heart", "Heart"],
+  ["check", "Check Mark"], ["cross", "Cross Mark"], ["warning", "Warning Sign"], ["info", "Info Icon"], ["like", "Like"], ["dislike", "Dislike"], ["question", "Question Mark"], ["exclamation", "Exclamation Mark"],
+  ["speech", "Speech Bubble"], ["comment", "Comment Bubble"], ["callout", "Callout Box"], ["sticky", "Sticky Note"], ["connector", "Connector"], ["free-drawing", "Free Drawing"], ["highlighter", "Highlighter"], ["pen", "Pen"], ["marker", "Marker"],
+  ["dashed-line", "Dashed Line"], ["dotted-line", "Dotted Line"], ["numbered-marker", "Numbered Marker"], ["step", "Step Indicator"], ["flowchart", "Flowchart Connector"], ["process-arrow", "Process Arrow"], ["timeline-arrow", "Timeline Arrow"], ["mind-map", "Mind Map Connector"]
+];
 function currentFolder() {
   return state.folders.find((folder) => folder.id === state.selectedFolderId) || null;
 }
@@ -55,18 +62,21 @@ function currentPage() {
   return currentPages().find((page) => page.id === state.selectedPageId) || null;
 }
 
-function createNotebookPage(shape = "portrait") {
-  return { id: createBlockId(), shape, blocks: [] };
+function createNotebookPage(shape = "portrait", name = "Page") {
+  return { id: createBlockId(), name, shape, blocks: [] };
 }
 
 function normalizeNotebookBlock(block, index = 0) {
-  const type = block?.type === "image" ? "image" : block?.type === "heading" ? "heading" : "text";
+  const type = block?.type === "image" ? "image" : block?.type === "heading" ? "heading" : block?.type === "shape" ? "shape" : "text";
   const defaults = type === "image"
     ? { width: Number(block?.styles?.width || block?.width || 320), height: Number(block?.styles?.height || block?.height || 220) }
-    : { width: Number(block?.width || 360), height: Number(block?.height || (type === "heading" ? 70 : 130)) };
+    : type === "shape"
+      ? { width: Number(block?.width || 180), height: Number(block?.height || 110) }
+      : { width: Number(block?.width || 360), height: Number(block?.height || (type === "heading" ? 70 : 130)) };
   return {
     id: block?.id || createBlockId(),
     type,
+    shapeKind: block?.shapeKind || block?.kind || "rectangle",
     text: block?.text || (type === "heading" ? "New heading" : type === "text" ? "New text" : ""),
     url: block?.url || "",
     imageId: block?.imageId || null,
@@ -85,15 +95,16 @@ function normalizeNotebookContent(content) {
     const pages = content.pages.length ? content.pages : [createNotebookPage()];
     return {
       type: "notebook",
-      pages: pages.map((page) => ({
+      pages: pages.map((page, index) => ({
         id: page.id || createBlockId(),
+        name: page.name || `Page ${index + 1}`,
         shape: page.shape || "portrait",
         blocks: Array.isArray(page.blocks) ? page.blocks.map(normalizeNotebookBlock) : []
       }))
     };
   }
   const legacyBlocks = Array.isArray(content) ? content : Array.isArray(content?.blocks) ? content.blocks : [];
-  return { type: "notebook", pages: [{ id: createBlockId(), shape: "portrait", blocks: legacyBlocks.map(normalizeNotebookBlock) }] };
+  return { type: "notebook", pages: [{ id: createBlockId(), name: "Page 1", shape: "portrait", blocks: legacyBlocks.map(normalizeNotebookBlock) }] };
 }
 
 function normalizeContent(content) {
@@ -298,6 +309,23 @@ function renderWorkspaceSidebar() {
     </div>
   </aside>`;
 }
+function renderNotebookPagesList() {
+  const notebook = currentNotebook();
+  if (!notebook) return "";
+  return `<div class="notebook-pages-list">${notebook.pages.map((page, index) => `<button class="notebook-page-list-item ${page.id === state.activeNotebookPageId ? "active" : ""}" data-notebook-page-id="${page.id}" type="button"><span>${escapeHtml(page.name || `Page ${index + 1}`)}</span></button>`).join("")}</div>`;
+}
+
+function renderDrawingTools() {
+  return `<div class="drawing-tool-grid">${DRAWING_TOOLS.map(([kind, label]) => `<button class="drawing-tool-button" data-add-shape="${kind}" type="button"><span class="shape-tool-preview shape-${kind}"></span><span>${escapeHtml(label)}</span></button>`).join("")}</div>`;
+}
+
+function renderPageTabs(notebook, activeIndex) {
+  return `<div class="page-tab-bar">
+    <button class="page-tab-arrow" data-notebook-nav="prev" type="button" aria-label="Previous page" ${activeIndex === 0 ? "disabled" : ""}>‹</button>
+    <div class="page-tabs" role="tablist">${notebook.pages.map((page, index) => `<button class="page-tab ${page.id === state.activeNotebookPageId ? "active" : ""}" data-notebook-page-id="${page.id}" type="button" role="tab">${escapeHtml(page.name || `Page ${index + 1}`)}</button>`).join("")}</div>
+    <button class="page-tab-arrow" data-notebook-nav="next" type="button" aria-label="Next page" ${activeIndex >= notebook.pages.length - 1 ? "disabled" : ""}>›</button>
+  </div>`;
+}
 async function renderWorkspace() {
   const folder = currentFolder();
   const page = currentPage();
@@ -329,8 +357,14 @@ async function renderWorkspace() {
           <button class="template-button" data-page-shape="wide">${icon("wide")}<span>Wide page</span></button>
         </div>
         <div class="panel-section">
+          <div class="section-head"><span>Drawing Tools</span></div>
+          ${renderDrawingTools()}
+        </div>
+        <div class="panel-section">
           <div class="section-head"><span>Notebook</span></div>
           <button class="tool-button icon-tool" data-action="add-notebook-page">${icon("notebook")}<span>New notebook page</span></button>
+          <div class="section-subhead">Pages</div>
+          ${renderNotebookPagesList()}
         </div>
       </aside>
       <main class="center-stage">
@@ -467,25 +501,57 @@ function renderEditorSurface(page) {
   const dims = pageDimensions(notebookPage?.shape);
   return `<section class="notebook-editor-shell">
     ${state.focusMode ? `<button class="focus-exit-button" data-action="exit-focus" aria-label="Exit focus mode">X</button>` : ""}
-    <div class="notebook-stage-top"><span id="saveStatus" class="save-status">Saved</span><span class="notebook-count">Page ${index + 1} of ${total}</span></div>
+    <div class="notebook-stage-top"><span id="saveStatus" class="save-status">Saved</span><span class="notebook-count">${notebookPage.name || `Page ${index + 1}`} · ${index + 1} of ${total}</span></div>
+    ${renderPageTabs(notebook, index)}
     <div class="notebook-stage">
-      <button class="page-nav-button left" data-notebook-nav="prev" type="button" aria-label="Previous page" ${index === 0 ? "disabled" : ""}>‹</button>
       <article class="notebook-page notebook-page-${notebookPage.shape || "portrait"}" data-page-canvas style="width:${dims.width}px;height:${dims.height}px;">
         ${notebookPage.blocks.length ? notebookPage.blocks.map(renderNotebookBlock).join("") : `<button class="blank-notebook-prompt" data-action="start-writing" type="button">Add your first note</button>`}
       </article>
-      <button class="page-nav-button right" data-notebook-nav="next" type="button" aria-label="Next page" ${index >= total - 1 ? "disabled" : ""}>›</button>
     </div>
   </section>`;
 }
 
+function renderShapeVisual(block) {
+  const kind = block.shapeKind || "rectangle";
+  const styles = block.styles || {};
+  const stroke = styles.stroke || styles.color || "#0E2F76";
+  const fill = styles.fill || (kind === "sticky" || kind === "highlighter" ? "#E9F4FF" : "#F5FEFF");
+  const strokeWidth = Number(styles.strokeWidth || 3);
+  const dash = kind.includes("dashed") ? "8 7" : kind.includes("dotted") ? "2 7" : "";
+  const markerEnd = ["arrow", "curved-arrow", "connector", "process-arrow", "timeline-arrow", "mind-map", "flowchart"].includes(kind) ? `marker-end="url(#arrowHead)"` : "";
+  const markerStart = kind === "double-arrow" ? `marker-start="url(#arrowHead)"` : "";
+  if (["arrow", "double-arrow", "straight-line", "dashed-line", "dotted-line", "connector", "process-arrow", "timeline-arrow", "mind-map", "flowchart"].includes(kind)) {
+    return `<svg class="shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none"><defs><marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="${stroke}"/></marker></defs><line x1="8" y1="50" x2="92" y2="50" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="${dash}" stroke-linecap="round" ${markerStart} ${markerEnd}/></svg>`;
+  }
+  if (["curved-line", "curved-arrow"].includes(kind)) {
+    return `<svg class="shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none"><defs><marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="${stroke}"/></marker></defs><path d="M8 72 C34 8 66 92 92 28" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" ${markerEnd}/></svg>`;
+  }
+  if (kind === "circle" || kind === "ellipse") return `<svg class="shape-svg" viewBox="0 0 100 100"><ellipse cx="50" cy="50" rx="42" ry="${kind === "circle" ? 42 : 30}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/></svg>`;
+  if (kind === "triangle") return `<svg class="shape-svg" viewBox="0 0 100 100"><path d="M50 10 92 88 8 88Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/></svg>`;
+  if (kind === "diamond") return `<svg class="shape-svg" viewBox="0 0 100 100"><path d="M50 8 92 50 50 92 8 50Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/></svg>`;
+  if (kind === "pentagon") return `<svg class="shape-svg" viewBox="0 0 100 100"><path d="M50 8 92 38 76 92 24 92 8 38Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/></svg>`;
+  if (kind === "hexagon") return `<svg class="shape-svg" viewBox="0 0 100 100"><path d="M28 10h44l22 40-22 40H28L6 50Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/></svg>`;
+  if (kind === "star") return `<svg class="shape-svg" viewBox="0 0 100 100"><path d="M50 8 61 37 92 38 68 57 77 88 50 70 23 88 32 57 8 38 39 37Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/></svg>`;
+  if (kind === "heart") return `<svg class="shape-svg" viewBox="0 0 100 100"><path d="M50 88S12 62 12 34c0-15 11-24 24-24 7 0 12 4 14 9 2-5 7-9 14-9 13 0 24 9 24 24 0 28-38 54-38 54Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/></svg>`;
+  if (["check", "cross", "warning", "info", "like", "dislike", "question", "exclamation", "numbered-marker", "step"].includes(kind)) return `<div class="symbol-shape">${({check:"OK",cross:"X",warning:"!",info:"i",like:"+",dislike:"-",question:"?",exclamation:"!", "numbered-marker":"1", step:"1"})[kind]}</div>`;
+  if (["speech", "comment", "callout", "sticky"].includes(kind)) return `<div class="bubble-shape ${kind}">${escapeHtml(block.text || (kind === "sticky" ? "Note" : "Comment"))}</div>`;
+  return `<svg class="shape-svg" viewBox="0 0 100 100"><rect x="8" y="14" width="84" height="72" rx="${kind === "rounded-rectangle" ? 16 : 3}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/></svg>`;
+}
 function renderNotebookBlock(block) {
   const styles = block.styles || {};
   const selected = block.id === state.selectedBlockId ? " selected" : "";
-  const objectStyle = `left:${Number(block.x)}px;top:${Number(block.y)}px;width:${Number(block.width)}px;height:${Number(block.height)}px;transform:rotate(${Number(block.rotation || 0)}deg);`;
+  const objectStyle = `left:${Number(block.x)}px;top:${Number(block.y)}px;width:${Number(block.width)}px;height:${Number(block.height)}px;transform:rotate(${Number(block.rotation || 0)}deg);z-index:${Number(styles.zIndex || 2)};`;
   if (block.type === "image") {
     return `<div class="canvas-object image-object${selected}" data-block-id="${block.id}" style="${objectStyle}">
       <button class="object-grip" data-drag-block="${block.id}" type="button" aria-label="Move image"></button>
       <img src="${escapeAttribute(normalizeImageUrl(block.url))}" alt="${escapeAttribute(block.alt || "Document image")}" style="border-radius:${Number(styles.borderRadius || 10)}px;opacity:${Number(styles.opacity || 1)};box-shadow:${styles.shadow ? "0 16px 32px rgba(14,47,118,0.16)" : "none"};" />
+      <span class="resize-handle" data-resize-block="${block.id}"></span>
+    </div>`;
+  }
+  if (block.type === "shape") {
+    return `<div class="canvas-object shape-object${selected}" data-block-id="${block.id}" style="${objectStyle}opacity:${Number(styles.opacity || 1)};">
+      <button class="object-grip" data-drag-block="${block.id}" type="button" aria-label="Move shape"></button>
+      ${renderShapeVisual(block)}
       <span class="resize-handle" data-resize-block="${block.id}"></span>
     </div>`;
   }
@@ -517,16 +583,19 @@ function renderProperties() {
   const page = activeNotebookPage();
   if (!block) {
     panel.className = "properties-panel";
-    panel.innerHTML = `<div class="panel-empty-title">Page Properties</div>${shapeControl(page?.shape || "portrait")}<p class="panel-help">Select text or an image to edit object properties.</p>`;
+    panel.innerHTML = `<div class="panel-empty-title">Page Properties</div>${shapeControl(page?.shape || "portrait")}<p class="panel-help">Select a text block, image, shape, or connector to edit object properties.</p>`;
     return;
   }
   panel.className = "properties-panel";
   const styles = block.styles || {};
-  if (block.type === "image") {
-    panel.innerHTML = `${numberControl("Width", "width", block.width, 80, 900)}${numberControl("Height", "height", block.height, 80, 900)}${numberControl("Border Radius", "borderRadius", styles.borderRadius || 10, 0, 80)}${toggleControl("shadow", "Shadow", Boolean(styles.shadow))}${numberControl("Opacity", "opacity", styles.opacity || 1, 0.1, 1, 0.05)}${numberControl("Rotation", "rotation", block.rotation || 0, -180, 180)}<button class="secondary-button" type="button" disabled>Crop</button><button class="danger-button" data-delete-block="${block.id}">Delete</button>`;
+  if (block.type === "shape") {
+    panel.innerHTML = `${numberControl("Width", "width", block.width, 40, 1200)}${numberControl("Height", "height", block.height, 30, 1200)}${colorControl("Stroke", "stroke", styles.stroke || "#0E2F76")}${colorControl("Fill", "fill", styles.fill || "#e9f4ff")}${numberControl("Stroke Width", "strokeWidth", styles.strokeWidth || 3, 1, 16)}${numberControl("Opacity", "opacity", styles.opacity || 1, 0.1, 1, 0.05)}${numberControl("Rotation", "rotation", block.rotation || 0, -180, 180)}<div class="object-action-row"><button class="secondary-button" type="button" data-duplicate-block>Duplicate</button><button class="secondary-button" type="button" data-layer="1">Forward</button><button class="secondary-button" type="button" data-layer="-1">Backward</button></div><button class="danger-button" data-delete-block="${block.id}">Delete</button>`;
+    return;
+  }  if (block.type === "image") {
+    panel.innerHTML = `${numberControl("Width", "width", block.width, 80, 900)}${numberControl("Height", "height", block.height, 80, 900)}${numberControl("Border Radius", "borderRadius", styles.borderRadius || 10, 0, 80)}${toggleControl("shadow", "Shadow", Boolean(styles.shadow))}${numberControl("Opacity", "opacity", styles.opacity || 1, 0.1, 1, 0.05)}${numberControl("Rotation", "rotation", block.rotation || 0, -180, 180)}<button class="secondary-button" type="button" disabled>Crop</button><div class="object-action-row"><button class="secondary-button" type="button" data-duplicate-block>Duplicate</button><button class="secondary-button" type="button" data-layer="1">Forward</button><button class="secondary-button" type="button" data-layer="-1">Backward</button></div><button class="danger-button" data-delete-block="${block.id}">Delete</button>`;
     return;
   }
-  panel.innerHTML = `${fontControl(styles.fontFamily || "Inter")}${numberControl("Size", "fontSize", styles.fontSize || (block.type === "heading" ? 34 : 17), 8, 96)}${colorControl("Color", "color", styles.color || "#1A232E")}${toggleControl("bold", "Bold", Boolean(styles.bold))}${toggleControl("italic", "Italic", Boolean(styles.italic))}${toggleControl("underline", "Underline", Boolean(styles.underline))}${alignmentControl(styles.align || "left")}${numberControl("Line Spacing", "lineHeight", styles.lineHeight || 1.55, 1, 3, 0.05)}${numberControl("Letter Spacing", "letterSpacing", styles.letterSpacing || 0, 0, 12, 0.5)}${colorControl("Background", "background", styles.background || "#ffffff")}`;
+  panel.innerHTML = `${fontControl(styles.fontFamily || "Inter")}${numberControl("Size", "fontSize", styles.fontSize || (block.type === "heading" ? 34 : 17), 8, 96)}${colorControl("Color", "color", styles.color || "#1A232E")}${toggleControl("bold", "Bold", Boolean(styles.bold))}${toggleControl("italic", "Italic", Boolean(styles.italic))}${toggleControl("underline", "Underline", Boolean(styles.underline))}${alignmentControl(styles.align || "left")}${numberControl("Line Spacing", "lineHeight", styles.lineHeight || 1.55, 1, 3, 0.05)}${numberControl("Letter Spacing", "letterSpacing", styles.letterSpacing || 0, 0, 12, 0.5)}${colorControl("Background", "background", styles.background || "#ffffff")}<div class="object-action-row"><button class="secondary-button" type="button" data-duplicate-block>Duplicate</button><button class="secondary-button" type="button" data-layer="1">Forward</button><button class="secondary-button" type="button" data-layer="-1">Backward</button></div><button class="danger-button" data-delete-block="${block.id}">Delete</button>`;
 }
 
 function fontControl(value) {
@@ -743,7 +812,7 @@ function updateSelectedBlockQuiet(updater) {
 function addNotebookPage(shape = "portrait") {
   const notebook = currentNotebook();
   if (!notebook) return;
-  const next = createNotebookPage(shape);
+  const next = createNotebookPage(shape, `Page ${notebook.pages.length + 1}`);
   notebook.pages.push(next);
   state.activeNotebookPageId = next.id;
   state.selectedBlockId = null;
@@ -769,6 +838,54 @@ function setActivePageShape(shape) {
   scheduleContentSave();
 }
 
+function selectNotebookPageById(pageId) {
+  const notebook = currentNotebook();
+  if (!notebook?.pages.some((page) => page.id === pageId)) return;
+  state.activeNotebookPageId = pageId;
+  state.selectedBlockId = null;
+  renderWorkspace();
+}
+
+function addShape(shapeKind) {
+  const notebookPage = activeNotebookPage();
+  if (!notebookPage) return;
+  const offset = notebookPage.blocks.length % 7;
+  const isLine = shapeKind.includes("line") || shapeKind.includes("arrow") || shapeKind.includes("connector");
+  const isSymbol = ["check", "cross", "warning", "info", "like", "dislike", "question", "exclamation", "numbered-marker", "step"].includes(shapeKind);
+  const block = normalizeNotebookBlock({
+    type: "shape",
+    shapeKind,
+    text: shapeKind.includes("note") || shapeKind.includes("bubble") || shapeKind === "sticky" ? "Note" : "",
+    x: 110 + offset * 24,
+    y: 110 + offset * 30,
+    width: isLine ? 240 : isSymbol ? 96 : 180,
+    height: isLine ? 80 : isSymbol ? 96 : 120,
+    rotation: 0,
+    styles: { stroke: "#0E2F76", fill: "#E9F4FF", strokeWidth: 3, opacity: 1, zIndex: 2 }
+  });
+  notebookPage.blocks = [...notebookPage.blocks, block];
+  state.selectedBlockId = block.id;
+  renderWorkspace();
+  scheduleContentSave();
+}
+
+function duplicateSelectedBlock() {
+  const notebookPage = activeNotebookPage();
+  const block = selectedNotebookBlock();
+  if (!notebookPage || !block) return;
+  const copy = normalizeNotebookBlock({ ...JSON.parse(JSON.stringify(block)), id: createBlockId(), x: block.x + 28, y: block.y + 28 });
+  notebookPage.blocks.push(copy);
+  state.selectedBlockId = copy.id;
+  renderWorkspace();
+  scheduleContentSave();
+}
+
+function layerSelectedBlock(direction) {
+  const block = selectedNotebookBlock();
+  if (!block) return;
+  const current = Number(block.styles?.zIndex || 2);
+  updateSelectedBlock((item) => ({ ...item, styles: { ...(item.styles || {}), zIndex: Math.max(1, current + direction) } }));
+}
 function addBlock(type, imageData = null) {
   const notebookPage = activeNotebookPage();
   if (!notebookPage) return;
@@ -875,7 +992,7 @@ els.pageForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const title = els.pageNameInput.value.trim();
   if (!title || !state.selectedFolderId) return;
-  const page = await api(`/api/folders/${state.selectedFolderId}/pages`, { method: "POST", body: { title, content: { type: "notebook", pages: [createNotebookPage()] } } });
+  const page = await api(`/api/folders/${state.selectedFolderId}/pages`, { method: "POST", body: { title, content: { type: "notebook", pages: [createNotebookPage("portrait", "Page 1")] } } });
   const pages = [{ ...page, content: normalizeContent(page.content) }, ...currentPages()];
   state.pagesByFolder.set(state.selectedFolderId, pages);
   els.pageDialog.close();
@@ -917,6 +1034,9 @@ els.appRoot.addEventListener("click", async (event) => {
   const nav = event.target.closest("[data-notebook-nav]");
   if (nav) return changeNotebookPage(nav.dataset.notebookNav === "next" ? 1 : -1);
 
+  const notebookPageButton = event.target.closest("[data-notebook-page-id]");
+  if (notebookPageButton) return selectNotebookPageById(notebookPageButton.dataset.notebookPageId);
+
   const shape = event.target.closest("[data-page-shape]");
   if (shape) return addNotebookPage(shape.dataset.pageShape);
 
@@ -928,6 +1048,15 @@ els.appRoot.addEventListener("click", async (event) => {
 
   const addButton = event.target.closest("[data-add-block]");
   if (addButton) return addBlock(addButton.dataset.addBlock);
+
+  const shapeButton = event.target.closest("[data-add-shape]");
+  if (shapeButton) return addShape(shapeButton.dataset.addShape);
+
+  const duplicateButton = event.target.closest("[data-duplicate-block]");
+  if (duplicateButton) return duplicateSelectedBlock();
+
+  const layerButton = event.target.closest("[data-layer]");
+  if (layerButton) return layerSelectedBlock(Number(layerButton.dataset.layer));
 
   const align = event.target.closest("[data-align]");
   if (align) return updateSelectedBlock((block) => ({ ...block, styles: { ...(block.styles || {}), align: align.dataset.align } }));
