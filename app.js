@@ -188,6 +188,24 @@ function renderWelcome() {
   `;
 }
 
+function workspaceShell(content) {
+  return `<section class="workspace-shell">${renderWorkspaceSidebar()}<div class="workspace-main">${content}</div></section>`;
+}
+
+function renderWorkspaceSidebar() {
+  const initial = state.user?.name?.trim()?.charAt(0)?.toUpperCase() || state.user?.email?.charAt(0)?.toUpperCase() || "M";
+  return `<aside class="workspace-sidebar" aria-label="Workspace navigation">
+    <div class="sidebar-nav">
+      <button class="sidebar-item ${state.view === "dashboard" || state.view === "welcome" ? "active" : ""}" data-action="dashboard" type="button"><span>Dashboard</span></button>
+      <button class="sidebar-item ${state.view === "folder" ? "active" : ""}" data-action="dashboard" type="button"><span>Folders</span></button>
+    </div>
+    <div class="sidebar-bottom">
+      <button class="sidebar-item" type="button"><span>Settings</span></button>
+      <button class="sidebar-item" type="button"><span>Dark Mode</span></button>
+      <div class="sidebar-profile" aria-label="User profile">${escapeHtml(initial)}</div>
+    </div>
+  </aside>`;
+}
 async function renderWorkspace() {
   const folder = currentFolder();
   const page = currentPage();
@@ -195,7 +213,7 @@ async function renderWorkspace() {
 
   if (!showEditor) {
     setHeaderAction(state.view === "folder" ? "New Page" : "Create Folder", state.view === "folder" ? openPageDialog : openFolderDialog);
-    els.appRoot.innerHTML = folder ? renderFolderView(folder) : renderDashboardView();
+    els.appRoot.innerHTML = workspaceShell(folder ? renderFolderView(folder) : renderDashboardView());
     return;
   }
 
@@ -452,6 +470,22 @@ async function showDashboard() {
   setView(state.folders.length ? "dashboard" : "welcome");
 }
 
+async function refreshWorkspace() {
+  await loadCurrentUser();
+  if (!state.user) return setView("auth");
+  await loadFolders();
+  if (state.selectedFolderId && state.folders.some((folder) => folder.id === state.selectedFolderId)) {
+    await loadPages(state.selectedFolderId);
+    if (state.selectedPageId) {
+      const page = await api(`/api/pages/${state.selectedPageId}`);
+      const pages = currentPages().map((item) => item.id === state.selectedPageId ? { ...page, content: normalizeContent(page.content) } : item);
+      state.pagesByFolder.set(state.selectedFolderId, pages);
+      return setView("editor");
+    }
+    return setView("folder");
+  }
+  setView(state.folders.length ? "dashboard" : "welcome");
+}
 async function selectFolder(folderId) {
   state.selectedFolderId = folderId;
   state.selectedPageId = null;
@@ -586,7 +620,7 @@ function escapeAttribute(value) {
   return escapeHtml(value).replace(/'/g, "&#039;");
 }
 
-els.brandButton.addEventListener("click", () => setView("landing"));
+els.brandButton.addEventListener("click", refreshWorkspace);
 
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => document.querySelector(`#${button.dataset.closeDialog}`).close());
