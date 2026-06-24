@@ -1,0 +1,15 @@
+{
+  "name": "bluemind-docs-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Frontend for BlueMind Docs.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --check app.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

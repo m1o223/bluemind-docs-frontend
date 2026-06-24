@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BlueMind Docs</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="global-header">
+      <button class="brand-link" id="brandButton" type="button" aria-label="BlueMind Docs home">
+        <img class="brand-logo" src="/assets/bluemind-docs-logo.jpg" alt="BlueMind Docs" />
+        <span class="brand-name">BlueMind Docs</span>
+      </button>
+      <div class="header-actions"><button id="headerShareButton" class="secondary-button" hidden>Share</button><button id="headerFocusButton" class="secondary-button" hidden>Focus Mode</button><button id="headerActionButton" class="primary-button">Start</button><div id="sharePopover" class="share-popover" hidden></div></div>
+    </header>
+
+    <main id="appRoot" class="app-root"></main>
+
+    <dialog id="folderDialog" class="modal">
+      <form method="dialog" id="folderForm">
+        <h3>Folder name</h3>
+        <input id="folderNameInput" type="text" maxlength="120" autocomplete="off" required />
+        <div class="modal-actions">
+          <button type="button" class="secondary-button" data-close-dialog="folderDialog">Cancel</button>
+          <button type="submit" class="primary-button">Create</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="pageDialog" class="modal">
+      <form method="dialog" id="pageForm">
+        <h3>Page name</h3>
+        <input id="pageNameInput" type="text" maxlength="180" autocomplete="off" required />
+        <div class="modal-actions">
+          <button type="button" class="secondary-button" data-close-dialog="pageDialog">Cancel</button>
+          <button type="submit" class="primary-button">Create</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/config.js"></script>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
+
+
