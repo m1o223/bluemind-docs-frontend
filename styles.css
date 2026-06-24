@@ -858,3 +858,211 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   .workspace-page { width: min(100% - 48px, 980px); }
   .global-header { padding: 16px 32px; }
 }
+
+/* Official dashboard direction refinement */
+.global-header {
+  height: 88px;
+  padding: 18px 80px;
+  border-bottom: 1px solid #EAEAEA;
+}
+
+.brand-logo {
+  width: 64px;
+  height: 64px;
+}
+
+.brand-link {
+  gap: 16px;
+}
+
+.header-actions {
+  gap: 12px;
+}
+
+.header-utility-button,
+.header-profile-button {
+  min-height: 42px;
+  border: 1px solid #EAEAEA;
+  background: #FFFFFF;
+  color: var(--secondary);
+  font-weight: 750;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.header-utility-button {
+  border-radius: 10px;
+  padding: 0 15px;
+}
+
+.header-profile-button {
+  width: 42px;
+  border-radius: 50%;
+  padding: 0;
+  color: var(--primary);
+  font-weight: 850;
+}
+
+.header-utility-button:hover,
+.header-profile-button:hover {
+  background: #F5FEFF;
+  border-color: #D6D6D6;
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.workspace-shell {
+  grid-template-columns: 232px minmax(0, 1fr);
+}
+
+.workspace-sidebar {
+  padding: 42px 24px 30px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.sidebar-nav,
+.sidebar-bottom {
+  gap: 10px;
+}
+
+.sidebar-item {
+  min-height: 46px;
+  border-radius: 12px;
+  padding: 0 14px;
+}
+
+.sidebar-item:hover,
+.sidebar-item.active {
+  box-shadow: none;
+}
+
+.workspace-page {
+  width: min(1180px, calc(100% - 120px));
+  padding: 96px 0;
+}
+
+.folder-header {
+  display: block;
+  margin-bottom: 34px;
+}
+
+.folder-header .eyebrow,
+.workspace-intro .eyebrow {
+  margin-bottom: 18px;
+}
+
+.folder-header h1 {
+  max-width: 780px;
+  margin-bottom: 12px;
+  font-size: 52px;
+  line-height: 1.04;
+}
+
+.folder-header::after {
+  content: "Create and organize pages inside this folder.";
+  display: block;
+  color: var(--secondary);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.folder-workspace {
+  min-height: 520px;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 58px;
+  border: 1px solid #EAEAEA;
+  border-radius: 24px;
+  background: #FFFFFF;
+  box-shadow: 0 18px 46px rgba(14, 47, 118, 0.035);
+}
+
+.folder-workspace .page-grid {
+  width: 100%;
+  align-self: start;
+}
+
+.create-page-card {
+  width: min(430px, 100%);
+  min-height: 390px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 18px;
+  border: 1px solid #EAEAEA;
+  border-radius: 26px;
+  background: #FFFFFF;
+  color: var(--text);
+  padding: 44px 36px;
+  text-align: center;
+  box-shadow: 0 16px 42px rgba(14, 47, 118, 0.045);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.create-page-card:hover {
+  transform: translateY(-4px) scale(1.006);
+  border-color: #D6D6D6;
+  box-shadow: 0 22px 52px rgba(14, 47, 118, 0.075);
+}
+
+.create-page-card:focus-visible {
+  outline: 3px solid rgba(14, 47, 118, 0.18);
+  outline-offset: 4px;
+}
+
+.document-illustration {
+  position: relative;
+  width: 142px;
+  height: 172px;
+  display: block;
+  border: 1px solid #EAEAEA;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F5FEFF 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.9), 0 18px 38px rgba(14, 47, 118, 0.06);
+}
+
+.document-illustration::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 46px;
+  height: 46px;
+  border-left: 1px solid #EAEAEA;
+  border-bottom: 1px solid #EAEAEA;
+  border-radius: 0 20px 0 14px;
+  background: #F5FEFF;
+}
+
+.document-illustration span {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  height: 8px;
+  border-radius: 999px;
+  background: #EAEAEA;
+}
+
+.document-illustration span:nth-child(1) { top: 72px; background: rgba(14, 47, 118, 0.22); }
+.document-illustration span:nth-child(2) { top: 96px; }
+.document-illustration span:nth-child(3) { top: 120px; right: 50px; }
+
+.create-page-card strong {
+  color: var(--primary);
+  font-size: 25px;
+  line-height: 1.1;
+}
+
+.create-page-card small {
+  max-width: 270px;
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+@media (max-width: 1200px) {
+  .global-header { padding: 16px 42px; }
+  .workspace-shell { grid-template-columns: 204px minmax(0, 1fr); }
+  .workspace-page { width: min(100% - 64px, 1040px); }
+  .folder-workspace { padding: 44px; }
+}

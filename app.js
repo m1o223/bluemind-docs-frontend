@@ -19,6 +19,7 @@ const els = {
   headerActionButton: document.querySelector("#headerActionButton"),
   headerShareButton: document.querySelector("#headerShareButton"),
   headerFocusButton: document.querySelector("#headerFocusButton"),
+  headerProfileButton: document.querySelector("#headerProfileButton"),
   sharePopover: document.querySelector("#sharePopover"),
   brandButton: document.querySelector("#brandButton"),
   folderDialog: document.querySelector("#folderDialog"),
@@ -75,7 +76,13 @@ function setView(view) {
   render();
 }
 
+function updateHeaderProfile() {
+  if (!els.headerProfileButton) return;
+  const initial = state.user?.name?.trim()?.charAt(0)?.toUpperCase() || state.user?.email?.charAt(0)?.toUpperCase() || "M";
+  els.headerProfileButton.textContent = initial;
+}
 function setHeaderAction(label, handler) {
+  updateHeaderProfile();
   const showEditorActions = state.view === "editor" && !state.focusMode;
   els.headerActionButton.hidden = !label;
   els.headerActionButton.textContent = label || "";
@@ -193,16 +200,16 @@ function workspaceShell(content) {
 }
 
 function renderWorkspaceSidebar() {
-  const initial = state.user?.name?.trim()?.charAt(0)?.toUpperCase() || state.user?.email?.charAt(0)?.toUpperCase() || "M";
   return `<aside class="workspace-sidebar" aria-label="Workspace navigation">
     <div class="sidebar-nav">
       <button class="sidebar-item ${state.view === "dashboard" || state.view === "welcome" ? "active" : ""}" data-action="dashboard" type="button"><span>Dashboard</span></button>
       <button class="sidebar-item ${state.view === "folder" ? "active" : ""}" data-action="dashboard" type="button"><span>Folders</span></button>
+      <button class="sidebar-item" data-action="dashboard" type="button"><span>Pages</span></button>
+      <button class="sidebar-item" type="button"><span>Shared</span></button>
     </div>
     <div class="sidebar-bottom">
-      <button class="sidebar-item" type="button"><span>Settings</span></button>
       <button class="sidebar-item" type="button"><span>Dark Mode</span></button>
-      <div class="sidebar-profile" aria-label="User profile">${escapeHtml(initial)}</div>
+      <button class="sidebar-item" type="button"><span>Settings</span></button>
     </div>
   </aside>`;
 }
@@ -281,12 +288,12 @@ function renderFolderView(folder) {
   return `
     <section class="workspace-page">
       <div class="folder-header">
-        <button class="text-button" data-action="dashboard">Dashboard</button>
         <div>
           <p class="eyebrow">Folder</p>
           <h1>${escapeHtml(folder.name)}</h1>
         </div>
       </div>
+      <div class="folder-workspace">
       ${pages.length ? `
         <div class="page-grid">
           ${pages.map((page) => `
@@ -297,12 +304,13 @@ function renderFolderView(folder) {
           `).join("")}
         </div>
       ` : `
-        <div class="empty-card">
-          <h2>No pages yet</h2>
-          <p>Create the first page in this folder.</p>
-          <button class="primary-button" data-action="create-page">Create Page</button>
-        </div>
+        <button class="create-page-card" data-action="create-page" type="button">
+          <span class="document-illustration" aria-hidden="true"><span></span><span></span><span></span></span>
+          <strong>Create Page</strong>
+          <small>Create the first page in this folder.</small>
+        </button>
       `}
+      </div>
     </section>
   `;
 }
