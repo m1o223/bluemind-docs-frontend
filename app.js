@@ -898,7 +898,13 @@ function addBlock(type, imageData = null) {
   notebookPage.blocks = [...notebookPage.blocks, block];
   state.selectedBlockId = block.id;
   renderWorkspace();
-  setTimeout(() => document.querySelector(`[data-text-input="${block.id}"]`)?.focus(), 0);
+  if (type === "heading" || type === "text") {
+    setTimeout(() => {
+      const field = document.querySelector(`[data-text-input="${block.id}"]`);
+      field?.focus();
+      field?.select?.();
+    }, 0);
+  }
   scheduleContentSave();
 }
 
@@ -1078,6 +1084,13 @@ els.appRoot.addEventListener("click", async (event) => {
     return;
   }
 
+  const textEditor = event.target.closest("[data-text-input]");
+  if (textEditor) {
+    state.selectedBlockId = textEditor.dataset.textInput;
+    renderProperties();
+    return;
+  }
+
   const block = event.target.closest("[data-block-id]");
   if (block) {
     state.selectedBlockId = block.dataset.blockId;
@@ -1089,6 +1102,13 @@ els.appRoot.addEventListener("click", async (event) => {
     state.selectedBlockId = null;
     renderProperties();
   }
+});
+
+els.appRoot.addEventListener("focusin", (event) => {
+  const textEditor = event.target.closest("[data-text-input]");
+  if (!textEditor) return;
+  state.selectedBlockId = textEditor.dataset.textInput;
+  renderProperties();
 });
 
 els.appRoot.addEventListener("input", (event) => {
