@@ -7,6 +7,7 @@ const state = {
   selectedFolderId: null,
   selectedPageId: null,
   selectedBlockId: null,
+  activeNotebookPageId: null,
   saveTimer: null,
   user: null,
   focusMode: false,
@@ -14,8 +15,12 @@ const state = {
   currentShare: null
 };
 
+let pointerInteraction = null;
+
 const els = {
   appRoot: document.querySelector("#appRoot"),
+  headerBackButton: document.querySelector("#headerBackButton"),
+  headerNotebookTitle: document.querySelector("#headerNotebookTitle"),
   headerActionButton: document.querySelector("#headerActionButton"),
   headerShareButton: document.querySelector("#headerShareButton"),
   headerFocusButton: document.querySelector("#headerFocusButton"),
@@ -50,12 +55,87 @@ function currentPage() {
   return currentPages().find((page) => page.id === state.selectedPageId) || null;
 }
 
-function normalizeContent(content) {
-  if (Array.isArray(content)) return content;
-  if (content && Array.isArray(content.blocks)) return content.blocks;
-  return [];
+function createNotebookPage(shape = "portrait") {
+  return { id: createBlockId(), shape, blocks: [] };
 }
 
+function normalizeNotebookBlock(block, index = 0) {
+  const type = block?.type === "image" ? "image" : block?.type === "heading" ? "heading" : "text";
+  const defaults = type === "image"
+    ? { width: Number(block?.styles?.width || block?.width || 320), height: Number(block?.styles?.height || block?.height || 220) }
+    : { width: Number(block?.width || 360), height: Number(block?.height || (type === "heading" ? 70 : 130)) };
+  return {
+    id: block?.id || createBlockId(),
+    type,
+    text: block?.text || (type === "heading" ? "New heading" : type === "text" ? "New text" : ""),
+    url: block?.url || "",
+    imageId: block?.imageId || null,
+    alt: block?.alt || block?.fileName || "Document image",
+    x: Number.isFinite(Number(block?.x)) ? Number(block.x) : 80 + (index % 3) * 28,
+    y: Number.isFinite(Number(block?.y)) ? Number(block.y) : 80 + index * 34,
+    width: defaults.width,
+    height: defaults.height,
+    rotation: Number(block?.rotation || block?.styles?.rotation || 0),
+    styles: { ...(block?.styles || {}) }
+  };
+}
+
+function normalizeNotebookContent(content) {
+  if (content?.type === "notebook" && Array.isArray(content.pages)) {
+    const pages = content.pages.length ? content.pages : [createNotebookPage()];
+    return {
+      type: "notebook",
+      pages: pages.map((page) => ({
+        id: page.id || createBlockId(),
+        shape: page.shape || "portrait",
+        blocks: Array.isArray(page.blocks) ? page.blocks.map(normalizeNotebookBlock) : []
+      }))
+    };
+  }
+  const legacyBlocks = Array.isArray(content) ? content : Array.isArray(content?.blocks) ? content.blocks : [];
+  return { type: "notebook", pages: [{ id: createBlockId(), shape: "portrait", blocks: legacyBlocks.map(normalizeNotebookBlock) }] };
+}
+
+function normalizeContent(content) {
+  return normalizeNotebookContent(content);
+}
+
+function currentNotebook() {
+  const page = currentPage();
+  if (!page) return null;
+  page.content = normalizeNotebookContent(page.content);
+  return page.content;
+}
+
+function activeNotebookPage() {
+  const notebook = currentNotebook();
+  if (!notebook) return null;
+  let page = notebook.pages.find((item) => item.id === state.activeNotebookPageId);
+  if (!page) {
+    page = notebook.pages[0] || createNotebookPage();
+    if (!notebook.pages.length) notebook.pages.push(page);
+    state.activeNotebookPageId = page.id;
+  }
+  return page;
+}
+
+function activeNotebookPageIndex() {
+  const notebook = currentNotebook();
+  if (!notebook) return 0;
+  return Math.max(0, notebook.pages.findIndex((page) => page.id === state.activeNotebookPageId));
+}
+
+function selectedNotebookBlock() {
+  const page = activeNotebookPage();
+  return page?.blocks.find((block) => block.id === state.selectedBlockId) || null;
+}
+
+function normalizeImageUrl(url) {
+  if (!url) return "";
+  if (/^(https?:|data:|blob:)/.test(url)) return url;
+  if (url.startsWith("/")) return `${API_BASE}${url}`;
+  return url;
+}
 async function api(path, options = {}) {
   const isForm = options.body instanceof FormData;
   const response = await fetch(`${API_BASE}${path}`, {
@@ -83,17 +163,22 @@ function updateHeaderProfile() {
 }
 function setHeaderAction(label, handler) {
   updateHeaderProfile();
+  const page = currentPage();
   const showEditorActions = state.view === "editor" && !state.focusMode;
-  els.headerActionButton.hidden = !label;
-  els.headerActionButton.textContent = label || "";
-  els.headerActionButton.onclick = handler || null;
+  const actionLabel = showEditorActions ? "Add More Page" : label;
+  const actionHandler = showEditorActions ? addNotebookPage : handler;
+  els.headerActionButton.hidden = !actionLabel;
+  els.headerActionButton.textContent = actionLabel || "";
+  els.headerActionButton.onclick = actionHandler || null;
   els.headerShareButton.hidden = !showEditorActions;
   els.headerFocusButton.hidden = !showEditorActions;
+  els.headerBackButton.hidden = !(state.view === "folder" || state.view === "editor" || state.view === "dashboard");
+  els.headerNotebookTitle.hidden = !showEditorActions;
+  if (showEditorActions && page && document.activeElement !== els.headerNotebookTitle) els.headerNotebookTitle.value = page.title || "Untitled";
   els.sharePopover.hidden = !state.shareOpen || !showEditorActions;
   els.sharePopover.innerHTML = renderSharePopover();
   document.body.classList.toggle("focus-mode", state.focusMode);
 }
-
 function render() {
   if (state.view === "landing") renderLanding();
   if (state.view === "auth") renderAuth();
@@ -228,12 +313,24 @@ async function renderWorkspace() {
 
   els.appRoot.innerHTML = `
     <section class="editor-layout">
-      <aside class="left-panel">
+      <aside class="left-panel notebook-left-panel">
         <div class="panel-section">
-          <div class="section-head"><span>Add blocks</span></div>
-          <button class="tool-button" data-add-block="heading">Add Heading</button>
-          <button class="tool-button" data-add-block="text">Add Text</button>
-          <label class="tool-button file-tool">Add Image<input id="imageInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
+          <div class="section-head"><span>Add Blocks</span></div>
+          <button class="tool-button icon-tool" data-add-block="heading">${icon("heading")}<span>Heading</span></button>
+          <button class="tool-button icon-tool" data-add-block="text">${icon("text")}<span>Text</span></button>
+          <label class="tool-button icon-tool file-tool">${icon("image")}<span>Image</span><input id="imageInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
+        </div>
+        <div class="panel-section">
+          <div class="section-head"><span>Page Templates</span></div>
+          <button class="template-button" data-page-shape="square">${icon("square")}<span>Square page</span></button>
+          <button class="template-button" data-page-shape="portrait">${icon("portrait")}<span>Portrait page</span></button>
+          <button class="template-button" data-page-shape="landscape">${icon("landscape")}<span>Landscape page</span></button>
+          <button class="template-button" data-page-shape="long">${icon("long")}<span>Long page</span></button>
+          <button class="template-button" data-page-shape="wide">${icon("wide")}<span>Wide page</span></button>
+        </div>
+        <div class="panel-section">
+          <div class="section-head"><span>Notebook</span></div>
+          <button class="tool-button icon-tool" data-action="add-notebook-page">${icon("notebook")}<span>New notebook page</span></button>
         </div>
       </aside>
       <main class="center-stage">
@@ -335,58 +432,114 @@ function renderFolderSurface(folder) {
   `;
 }
 
-function renderEditorSurface(page) {
-  const blocks = normalizeContent(page.content);
-  return `<section class="document-surface">${state.focusMode ? `<button class="focus-exit-button" data-action="exit-focus" aria-label="Exit focus mode">X</button>` : ""}<article id="paper" class="paper" aria-label="Document paper"><input id="pageTitleInput" class="paper-title-input" type="text" value="${escapeAttribute(page.title)}" aria-label="Page title" placeholder="Untitled" /><div class="paper-body">${blocks.length ? blocks.map(renderBlock).join("") : `<button class="blank-paper-prompt" data-action="start-writing">Start writing...</button>`}</div></article></section>`;
+function icon(name) {
+  const icons = {
+    heading: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5v14M19 5v14M5 12h14"/></svg>`,
+    text: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M8 6v12M16 6v12"/></svg>`,
+    image: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7Z"/><path d="m8 16 3-3 2 2 3-4 3 5"/><path d="M9 9h.01"/></svg>`,
+    square: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>`,
+    portrait: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v16H8z"/></svg>`,
+    landscape: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v8H4z"/></svg>`,
+    long: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v18H9z"/></svg>`,
+    wide: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18v6H3z"/></svg>`,
+    notebook: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M9 4v16"/></svg>`
+  };
+  return icons[name] || icons.text;
 }
 
-function renderBlock(block) {
-  const styles = block.styles || {};
-  const common = `data-block-id="${block.id}" class="block ${block.id === state.selectedBlockId ? "selected" : ""}" style="text-align:${styles.align || "left"};"`;
-  if (block.type === "image") {
-    const width = Number(styles.width || 400);
-    const height = styles.height ? `height:${Number(styles.height)}px;` : "";
-    const justify = styles.align === "center" ? "center" : styles.align === "right" ? "flex-end" : "flex-start";
-    return `<div ${common}><div class="image-block-inner" style="justify-content:${justify};"><img src="${escapeAttribute(block.url)}" alt="${escapeAttribute(block.alt || "Document image")}" style="width:${width}px;${height}border-radius:${Number(styles.borderRadius || 0)}px;" /></div></div>`;
-  }
-  const fontSize = Number(styles.fontSize || (block.type === "heading" ? 32 : 16));
-  const color = styles.color || "#1A232E";
-  const bold = styles.bold ? 700 : block.type === "heading" ? 760 : 400;
-  const italic = styles.italic ? "italic" : "normal";
-  const lineHeight = styles.lineHeight || (block.type === "text" ? 1.55 : 1.18);
-  if (block.type === "heading") {
-    return `<div ${common}><input type="text" data-text-input="${block.id}" value="${escapeAttribute(block.text || "")}" placeholder="Heading" style="font-size:${fontSize}px;color:${color};font-weight:${bold};font-style:${italic};line-height:${lineHeight};" /></div>`;
-  }
-  return `<div ${common}><textarea data-text-input="${block.id}" rows="4" placeholder="Start writing..." style="font-size:${fontSize}px;color:${color};font-weight:${bold};font-style:${italic};line-height:${lineHeight};">${escapeHtml(block.text || "")}</textarea></div>`;
+function pageDimensions(shape = "portrait") {
+  const sizes = {
+    square: [720, 720],
+    portrait: [760, 980],
+    landscape: [980, 680],
+    long: [720, 1180],
+    wide: [1120, 620]
+  };
+  const [width, height] = sizes[shape] || sizes.portrait;
+  return { width, height };
 }
+
+function renderEditorSurface(page) {
+  const notebook = currentNotebook();
+  const notebookPage = activeNotebookPage();
+  const index = activeNotebookPageIndex();
+  const total = notebook?.pages.length || 1;
+  const dims = pageDimensions(notebookPage?.shape);
+  return `<section class="notebook-editor-shell">
+    ${state.focusMode ? `<button class="focus-exit-button" data-action="exit-focus" aria-label="Exit focus mode">X</button>` : ""}
+    <div class="notebook-stage-top"><span id="saveStatus" class="save-status">Saved</span><span class="notebook-count">Page ${index + 1} of ${total}</span></div>
+    <div class="notebook-stage">
+      <button class="page-nav-button left" data-notebook-nav="prev" type="button" aria-label="Previous page" ${index === 0 ? "disabled" : ""}>‹</button>
+      <article class="notebook-page notebook-page-${notebookPage.shape || "portrait"}" data-page-canvas style="width:${dims.width}px;height:${dims.height}px;">
+        ${notebookPage.blocks.length ? notebookPage.blocks.map(renderNotebookBlock).join("") : `<button class="blank-notebook-prompt" data-action="start-writing" type="button">Add your first note</button>`}
+      </article>
+      <button class="page-nav-button right" data-notebook-nav="next" type="button" aria-label="Next page" ${index >= total - 1 ? "disabled" : ""}>›</button>
+    </div>
+  </section>`;
+}
+
+function renderNotebookBlock(block) {
+  const styles = block.styles || {};
+  const selected = block.id === state.selectedBlockId ? " selected" : "";
+  const objectStyle = `left:${Number(block.x)}px;top:${Number(block.y)}px;width:${Number(block.width)}px;height:${Number(block.height)}px;transform:rotate(${Number(block.rotation || 0)}deg);`;
+  if (block.type === "image") {
+    return `<div class="canvas-object image-object${selected}" data-block-id="${block.id}" style="${objectStyle}">
+      <button class="object-grip" data-drag-block="${block.id}" type="button" aria-label="Move image"></button>
+      <img src="${escapeAttribute(normalizeImageUrl(block.url))}" alt="${escapeAttribute(block.alt || "Document image")}" style="border-radius:${Number(styles.borderRadius || 10)}px;opacity:${Number(styles.opacity || 1)};box-shadow:${styles.shadow ? "0 16px 32px rgba(14,47,118,0.16)" : "none"};" />
+      <span class="resize-handle" data-resize-block="${block.id}"></span>
+    </div>`;
+  }
+  const fontSize = Number(styles.fontSize || (block.type === "heading" ? 34 : 17));
+  const color = styles.color || "#1A232E";
+  const bold = styles.bold ? 800 : block.type === "heading" ? 760 : 400;
+  const italic = styles.italic ? "italic" : "normal";
+  const underline = styles.underline ? "underline" : "none";
+  const lineHeight = Number(styles.lineHeight || (block.type === "text" ? 1.55 : 1.16));
+  const letterSpacing = Number(styles.letterSpacing || 0);
+  const background = styles.background || "transparent";
+  const align = styles.align || "left";
+  const tag = block.type === "heading" ? "input" : "textarea";
+  const value = escapeAttribute(block.text || "");
+  const field = tag === "input"
+    ? `<input data-text-input="${block.id}" value="${value}" placeholder="Heading" />`
+    : `<textarea data-text-input="${block.id}" placeholder="Start writing...">${escapeHtml(block.text || "")}</textarea>`;
+  return `<div class="canvas-object text-object${selected}" data-block-id="${block.id}" style="${objectStyle}background:${escapeAttribute(background)};">
+    <button class="object-grip" data-drag-block="${block.id}" type="button" aria-label="Move text"></button>
+    <div class="canvas-text-shell" style="font-family:${escapeAttribute(styles.fontFamily || "Inter, ui-sans-serif, system-ui")};font-size:${fontSize}px;color:${color};font-weight:${bold};font-style:${italic};text-decoration:${underline};line-height:${lineHeight};letter-spacing:${letterSpacing}px;text-align:${align};">${field}</div>
+    <span class="resize-handle" data-resize-block="${block.id}"></span>
+  </div>`;
+}
+
 function renderProperties() {
   const panel = document.querySelector("#propertiesPanel");
-  const page = currentPage();
-  const block = page?.content.find((item) => item.id === state.selectedBlockId);
   if (!panel) return;
+  const block = selectedNotebookBlock();
+  const page = activeNotebookPage();
   if (!block) {
-    panel.className = "properties-panel muted-copy";
-    panel.textContent = "Select a block to edit its properties.";
+    panel.className = "properties-panel";
+    panel.innerHTML = `<div class="panel-empty-title">Page Properties</div>${shapeControl(page?.shape || "portrait")}<p class="panel-help">Select text or an image to edit object properties.</p>`;
     return;
   }
-
   panel.className = "properties-panel";
+  const styles = block.styles || {};
   if (block.type === "image") {
-    const styles = block.styles || {};
-    panel.innerHTML = `${numberControl("Width", "width", styles.width || 400, 80, 760)}${numberControl("Height", "height", styles.height || "", 80, 1000)}${numberControl("Border radius", "borderRadius", styles.borderRadius || 0, 0, 80)}${alignmentControl(styles.align || "center")}<button class="danger-button" data-delete-block="${block.id}">Delete image</button>`;
+    panel.innerHTML = `${numberControl("Width", "width", block.width, 80, 900)}${numberControl("Height", "height", block.height, 80, 900)}${numberControl("Border Radius", "borderRadius", styles.borderRadius || 10, 0, 80)}${toggleControl("shadow", "Shadow", Boolean(styles.shadow))}${numberControl("Opacity", "opacity", styles.opacity || 1, 0.1, 1, 0.05)}${numberControl("Rotation", "rotation", block.rotation || 0, -180, 180)}<button class="secondary-button" type="button" disabled>Crop</button><button class="danger-button" data-delete-block="${block.id}">Delete</button>`;
     return;
   }
-
-  const styles = block.styles || {};
-  const isText = block.type === "text";
-  panel.innerHTML = `${numberControl("Font size", "fontSize", styles.fontSize || (block.type === "heading" ? 32 : 16), 10, 96)}${colorControl("Text color", "color", styles.color || "#1A232E")}${toggleControl("bold", "Bold", Boolean(styles.bold))}${toggleControl("italic", "Italic", Boolean(styles.italic))}${alignmentControl(styles.align || "left")}${isText ? numberControl("Line spacing", "lineHeight", styles.lineHeight || 1.55, 1, 3, 0.05) : ""}`;
+  panel.innerHTML = `${fontControl(styles.fontFamily || "Inter")}${numberControl("Size", "fontSize", styles.fontSize || (block.type === "heading" ? 34 : 17), 8, 96)}${colorControl("Color", "color", styles.color || "#1A232E")}${toggleControl("bold", "Bold", Boolean(styles.bold))}${toggleControl("italic", "Italic", Boolean(styles.italic))}${toggleControl("underline", "Underline", Boolean(styles.underline))}${alignmentControl(styles.align || "left")}${numberControl("Line Spacing", "lineHeight", styles.lineHeight || 1.55, 1, 3, 0.05)}${numberControl("Letter Spacing", "letterSpacing", styles.letterSpacing || 0, 0, 12, 0.5)}${colorControl("Background", "background", styles.background || "#ffffff")}`;
 }
 
+function fontControl(value) {
+  return `<div class="control-group"><label>Font</label><select data-style-key="fontFamily"><option ${value.includes("Inter") ? "selected" : ""}>Inter</option><option ${value.includes("Georgia") ? "selected" : ""}>Georgia</option><option ${value.includes("Times") ? "selected" : ""}>Times New Roman</option><option ${value.includes("Arial") ? "selected" : ""}>Arial</option></select></div>`;
+}
+function shapeControl(value) {
+  return `<div class="control-group"><label>Page Shape</label><select data-page-style="shape">${["square", "portrait", "landscape", "long", "wide"].map((shape) => `<option value="${shape}" ${shape === value ? "selected" : ""}>${shape}</option>`).join("")}</select></div>`;
+}
 function numberControl(label, key, value, min, max, step = 1) {
-  return `<div class="control-group"><label>${label}</label><input type="number" data-style-key="${key}" value="${value}" min="${min}" max="${max}" step="${step}" /></div>`;
+  return `<div class="control-group"><label>${label}</label><input type="number" data-style-key="${key}" value="${value ?? ""}" min="${min}" max="${max}" step="${step}" /></div>`;
 }
 function colorControl(label, key, value) {
-  return `<div class="control-group"><label>${label}</label><input type="color" data-style-key="${key}" value="${value}" /></div>`;
+  return `<div class="control-group"><label>${label}</label><input type="color" data-style-key="${key}" value="${value === "transparent" ? "#ffffff" : value}" /></div>`;
 }
 function toggleControl(key, label, active) {
   return `<div class="control-group"><label>${label}</label><button class="segment-button ${active ? "active" : ""}" data-toggle-style="${key}" type="button">${active ? "On" : "Off"}</button></div>`;
@@ -394,7 +547,6 @@ function toggleControl(key, label, active) {
 function alignmentControl(value) {
   return `<div class="control-group"><label>Alignment</label><div class="align-row">${["left", "center", "right"].map((align) => `<button class="segment-button ${value === align ? "active" : ""}" data-align="${align}" type="button">${align}</button>`).join("")}</div></div>`;
 }
-
 async function loadCurrentUser() {
   try {
     const result = await api("/api/auth/me");
@@ -478,6 +630,11 @@ async function showDashboard() {
   setView(state.folders.length ? "dashboard" : "welcome");
 }
 
+async function goBackInsideWorkspace() {
+  if (state.view === "editor" && state.selectedFolderId) return selectFolder(state.selectedFolderId);
+  if (state.view === "folder" || state.view === "dashboard") return showDashboard();
+  return refreshWorkspace();
+}
 async function refreshWorkspace() {
   await loadCurrentUser();
   if (!state.user) return setView("auth");
@@ -486,7 +643,9 @@ async function refreshWorkspace() {
     await loadPages(state.selectedFolderId);
     if (state.selectedPageId) {
       const page = await api(`/api/pages/${state.selectedPageId}`);
-      const pages = currentPages().map((item) => item.id === state.selectedPageId ? { ...page, content: normalizeContent(page.content) } : item);
+      const normalizedContent = normalizeNotebookContent(page.content);
+      state.activeNotebookPageId = normalizedContent.pages[0]?.id || null;
+      const pages = currentPages().map((item) => item.id === state.selectedPageId ? { ...page, content: normalizedContent } : item);
       state.pagesByFolder.set(state.selectedFolderId, pages);
       return setView("editor");
     }
@@ -509,7 +668,9 @@ async function selectPage(pageId) {
   state.shareOpen = false;
   state.currentShare = null;
   const page = await api(`/api/pages/${pageId}`);
-  const pages = currentPages().map((item) => item.id === pageId ? { ...page, content: normalizeContent(page.content) } : item);
+  const normalizedContent = normalizeNotebookContent(page.content);
+  state.activeNotebookPageId = normalizedContent.pages[0]?.id || null;
+  const pages = currentPages().map((item) => item.id === pageId ? { ...page, content: normalizedContent } : item);
   state.pagesByFolder.set(state.selectedFolderId, pages);
   await loadShareState();
   setView("editor");
@@ -537,22 +698,59 @@ function setSaveStatus(value) {
 }
 
 function updateSelectedBlock(updater) {
-  const page = currentPage();
-  if (!page || !state.selectedBlockId) return;
-  page.content = page.content.map((block) => block.id === state.selectedBlockId ? updater(block) : block);
+  const notebookPage = activeNotebookPage();
+  if (!notebookPage || !state.selectedBlockId) return;
+  notebookPage.blocks = notebookPage.blocks.map((block) => block.id === state.selectedBlockId ? updater(block) : block);
+  renderWorkspace();
+  scheduleContentSave();
+}
+
+function updateSelectedBlockQuiet(updater) {
+  const notebookPage = activeNotebookPage();
+  if (!notebookPage || !state.selectedBlockId) return;
+  notebookPage.blocks = notebookPage.blocks.map((block) => block.id === state.selectedBlockId ? updater(block) : block);
+  scheduleContentSave();
+}
+
+function addNotebookPage(shape = "portrait") {
+  const notebook = currentNotebook();
+  if (!notebook) return;
+  const next = createNotebookPage(shape);
+  notebook.pages.push(next);
+  state.activeNotebookPageId = next.id;
+  state.selectedBlockId = null;
+  renderWorkspace();
+  scheduleContentSave();
+}
+
+function changeNotebookPage(direction) {
+  const notebook = currentNotebook();
+  if (!notebook) return;
+  const index = activeNotebookPageIndex();
+  const nextIndex = Math.min(notebook.pages.length - 1, Math.max(0, index + direction));
+  state.activeNotebookPageId = notebook.pages[nextIndex]?.id || state.activeNotebookPageId;
+  state.selectedBlockId = null;
+  renderWorkspace();
+}
+
+function setActivePageShape(shape) {
+  const page = activeNotebookPage();
+  if (!page) return;
+  page.shape = shape;
   renderWorkspace();
   scheduleContentSave();
 }
 
 function addBlock(type, imageData = null) {
-  const page = currentPage();
-  if (!page) return;
-  const baseStyles = { color: "#1A232E", align: "left" };
+  const notebookPage = activeNotebookPage();
+  if (!notebookPage) return;
+  const offset = notebookPage.blocks.length % 7;
+  const base = { x: 90 + offset * 26, y: 90 + offset * 34, rotation: 0 };
   let block;
-  if (type === "heading") block = { id: createBlockId(), type, text: "New heading", styles: { ...baseStyles, fontSize: 32, bold: true } };
-  else if (type === "image") block = { id: createBlockId(), type, url: imageData.url, imageId: imageData.id, alt: imageData.fileName, styles: { width: 400, borderRadius: 8, align: "center" } };
-  else block = { id: createBlockId(), type: "text", text: "New paragraph", styles: { ...baseStyles, fontSize: 16, lineHeight: 1.55 } };
-  page.content = [...page.content, block];
+  if (type === "heading") block = normalizeNotebookBlock({ ...base, type, text: "New heading", width: 390, height: 78, styles: { fontSize: 36, color: "#1A232E", bold: true, align: "left" } });
+  else if (type === "image") block = normalizeNotebookBlock({ ...base, type, url: imageData.url, imageId: imageData.id, alt: imageData.fileName, width: 360, height: 240, styles: { borderRadius: 14, opacity: 1 } });
+  else block = normalizeNotebookBlock({ ...base, type: "text", text: "New text", width: 360, height: 140, styles: { fontSize: 17, color: "#1A232E", align: "left", lineHeight: 1.55 } });
+  notebookPage.blocks = [...notebookPage.blocks, block];
   state.selectedBlockId = block.id;
   renderWorkspace();
   setTimeout(() => document.querySelector(`[data-text-input="${block.id}"]`)?.focus(), 0);
@@ -568,9 +766,10 @@ function scheduleContentSave() {
 async function saveCurrentPageContent() {
   const page = currentPage();
   if (!page) return;
+  page.content = normalizeNotebookContent(page.content);
   try {
     const saved = await api(`/api/pages/${page.id}/content`, { method: "PATCH", body: { content: page.content } });
-    const pages = currentPages().map((item) => item.id === page.id ? { ...saved, content: normalizeContent(saved.content) } : item);
+    const pages = currentPages().map((item) => item.id === page.id ? { ...saved, content: normalizeNotebookContent(saved.content) } : item);
     state.pagesByFolder.set(state.selectedFolderId, pages);
     setSaveStatus("Saved");
   } catch (error) {
@@ -578,11 +777,10 @@ async function saveCurrentPageContent() {
     console.error(error);
   }
 }
-
 function scheduleTitleSave() {
   const page = currentPage();
-  const input = document.querySelector("#pageTitleInput");
-  if (!page || !input) return;
+  const input = els.headerNotebookTitle;
+  if (!page || !input || input.hidden) return;
   page.title = input.value.trim() || "Untitled";
   clearTimeout(state.saveTimer);
   setSaveStatus("Saving...");
@@ -629,6 +827,7 @@ function escapeAttribute(value) {
 }
 
 els.brandButton.addEventListener("click", refreshWorkspace);
+els.headerBackButton.addEventListener("click", goBackInsideWorkspace);
 
 document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => document.querySelector(`#${button.dataset.closeDialog}`).close());
@@ -648,7 +847,7 @@ els.pageForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const title = els.pageNameInput.value.trim();
   if (!title || !state.selectedFolderId) return;
-  const page = await api(`/api/folders/${state.selectedFolderId}/pages`, { method: "POST", body: { title, content: [] } });
+  const page = await api(`/api/folders/${state.selectedFolderId}/pages`, { method: "POST", body: { title, content: { type: "notebook", pages: [createNotebookPage()] } } });
   const pages = [{ ...page, content: normalizeContent(page.content) }, ...currentPages()];
   state.pagesByFolder.set(state.selectedFolderId, pages);
   els.pageDialog.close();
@@ -681,10 +880,17 @@ els.appRoot.addEventListener("click", async (event) => {
   if (action === "features") return document.querySelector("#features")?.scrollIntoView({ behavior: "smooth" });
   if (action === "create-folder") return openFolderDialog();
   if (action === "create-page") return openPageDialog();
+  if (action === "add-notebook-page") return addNotebookPage();
   if (action === "exit-focus") { state.focusMode = false; return renderWorkspace(); }
   if (action === "dashboard") return showDashboard();
   if (action === "back-folder") return selectFolder(state.selectedFolderId);
   if (action === "start-writing") return addBlock("text");
+
+  const nav = event.target.closest("[data-notebook-nav]");
+  if (nav) return changeNotebookPage(nav.dataset.notebookNav === "next" ? 1 : -1);
+
+  const shape = event.target.closest("[data-page-shape]");
+  if (shape) return addNotebookPage(shape.dataset.pageShape);
 
   const folderButton = event.target.closest("[data-folder-id]");
   if (folderButton) return selectFolder(folderButton.dataset.folderId);
@@ -692,24 +898,49 @@ els.appRoot.addEventListener("click", async (event) => {
   const pageButton = event.target.closest("[data-page-id]");
   if (pageButton) return selectPage(pageButton.dataset.pageId);
 
+  const addButton = event.target.closest("[data-add-block]");
+  if (addButton) return addBlock(addButton.dataset.addBlock);
+
+  const align = event.target.closest("[data-align]");
+  if (align) return updateSelectedBlock((block) => ({ ...block, styles: { ...(block.styles || {}), align: align.dataset.align } }));
+
+  const toggle = event.target.closest("[data-toggle-style]");
+  if (toggle) {
+    const key = toggle.dataset.toggleStyle;
+    return updateSelectedBlock((block) => ({ ...block, styles: { ...(block.styles || {}), [key]: !block.styles?.[key] } }));
+  }
+
+  const deleteButton = event.target.closest("[data-delete-block]");
+  if (deleteButton) {
+    const notebookPage = activeNotebookPage();
+    if (!notebookPage) return;
+    notebookPage.blocks = notebookPage.blocks.filter((block) => block.id !== deleteButton.dataset.deleteBlock);
+    state.selectedBlockId = null;
+    renderWorkspace();
+    scheduleContentSave();
+    return;
+  }
+
   const block = event.target.closest("[data-block-id]");
   if (block) {
     state.selectedBlockId = block.dataset.blockId;
-    if (event.target.closest("[data-text-input]")) {
-      renderProperties();
-      return;
-    }
     renderWorkspace();
+    return;
+  }
+
+  if (event.target.closest("[data-page-canvas]")) {
+    state.selectedBlockId = null;
+    renderProperties();
   }
 });
 
 els.appRoot.addEventListener("input", (event) => {
-  if (event.target.id === "pageTitleInput") return scheduleTitleSave();
+  if (event.target.id === "headerNotebookTitle") return scheduleTitleSave();
   const textInput = event.target.closest("[data-text-input]");
   if (textInput) {
     const blockId = textInput.dataset.textInput;
-    const page = currentPage();
-    const block = page?.content.find((item) => item.id === blockId);
+    const notebookPage = activeNotebookPage();
+    const block = notebookPage?.blocks.find((item) => item.id === blockId);
     if (!block) return;
     block.text = textInput.value;
     state.selectedBlockId = blockId;
@@ -719,32 +950,70 @@ els.appRoot.addEventListener("input", (event) => {
   const styleInput = event.target.closest("[data-style-key]");
   if (styleInput) {
     const key = styleInput.dataset.styleKey;
-    const value = styleInput.type === "number" ? Number(styleInput.value) : styleInput.value;
-    updateSelectedBlock((block) => ({ ...block, styles: { ...(block.styles || {}), [key]: value } }));
+    const raw = styleInput.value;
+    const value = styleInput.type === "number" ? Number(raw) : raw;
+    updateSelectedBlock((block) => {
+      if (["width", "height", "rotation"].includes(key)) return { ...block, [key]: value };
+      return { ...block, styles: { ...(block.styles || {}), [key]: value } };
+    });
+    return;
+  }
+  const pageStyle = event.target.closest("[data-page-style]");
+  if (pageStyle && pageStyle.dataset.pageStyle === "shape") setActivePageShape(pageStyle.value);
+});
+
+els.appRoot.addEventListener("pointerdown", (event) => {
+  const resize = event.target.closest("[data-resize-block]");
+  const drag = event.target.closest("[data-drag-block]");
+  if (!resize && !drag) return;
+  event.preventDefault();
+  const blockId = (resize || drag).dataset.resizeBlock || (resize || drag).dataset.dragBlock;
+  const block = activeNotebookPage()?.blocks.find((item) => item.id === blockId);
+  if (!block) return;
+  state.selectedBlockId = blockId;
+  pointerInteraction = {
+    mode: resize ? "resize" : "drag",
+    blockId,
+    startX: event.clientX,
+    startY: event.clientY,
+    x: block.x,
+    y: block.y,
+    width: block.width,
+    height: block.height,
+    element: event.target.closest("[data-block-id]")
+  };
+  event.target.setPointerCapture?.(event.pointerId);
+  renderProperties();
+});
+
+window.addEventListener("pointermove", (event) => {
+  if (!pointerInteraction) return;
+  const dx = event.clientX - pointerInteraction.startX;
+  const dy = event.clientY - pointerInteraction.startY;
+  const notebookPage = activeNotebookPage();
+  const block = notebookPage?.blocks.find((item) => item.id === pointerInteraction.blockId);
+  if (!block) return;
+  if (pointerInteraction.mode === "drag") {
+    block.x = Math.max(0, pointerInteraction.x + dx);
+    block.y = Math.max(0, pointerInteraction.y + dy);
+  } else {
+    block.width = Math.max(80, pointerInteraction.width + dx);
+    block.height = Math.max(60, pointerInteraction.height + dy);
+  }
+  if (pointerInteraction.element) {
+    pointerInteraction.element.style.left = `${block.x}px`;
+    pointerInteraction.element.style.top = `${block.y}px`;
+    pointerInteraction.element.style.width = `${block.width}px`;
+    pointerInteraction.element.style.height = `${block.height}px`;
   }
 });
 
-els.appRoot.addEventListener("click", (event) => {
-  const addButton = event.target.closest("[data-add-block]");
-  if (addButton) return addBlock(addButton.dataset.addBlock);
-  const align = event.target.closest("[data-align]");
-  if (align) return updateSelectedBlock((block) => ({ ...block, styles: { ...(block.styles || {}), align: align.dataset.align } }));
-  const toggle = event.target.closest("[data-toggle-style]");
-  if (toggle) {
-    const key = toggle.dataset.toggleStyle;
-    return updateSelectedBlock((block) => ({ ...block, styles: { ...(block.styles || {}), [key]: !block.styles?.[key] } }));
-  }
-  const deleteButton = event.target.closest("[data-delete-block]");
-  if (deleteButton) {
-    const page = currentPage();
-    if (!page) return;
-    page.content = page.content.filter((block) => block.id !== deleteButton.dataset.deleteBlock);
-    state.selectedBlockId = null;
-    renderWorkspace();
-    scheduleContentSave();
-  }
+window.addEventListener("pointerup", () => {
+  if (!pointerInteraction) return;
+  pointerInteraction = null;
+  renderProperties();
+  scheduleContentSave();
 });
-
 els.appRoot.addEventListener("change", (event) => {
   if (event.target.id === "imageInput") uploadImage(event.target.files[0]);
 });

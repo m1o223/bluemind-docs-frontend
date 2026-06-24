@@ -8,12 +8,24 @@
   </head>
   <body>
     <header class="global-header">
-      <button class="brand-link" id="brandButton" type="button" aria-label="Refresh BlueMind Docs workspace">
-        <img class="brand-logo" src="/assets/bluemind-docs-logo.png" alt="BlueMind Docs" />
-        <span class="brand-name">BlueMind Docs</span>
-      </button>
-      <div class="header-actions"><button id="headerShareButton" class="secondary-button" hidden>Share</button><button id="headerFocusButton" class="secondary-button" hidden>Focus Mode</button><button id="headerActionButton" class="primary-button">Start</button><button id="headerDarkModeButton" class="header-utility-button" type="button">Dark Mode</button><button id="headerSettingsButton" class="header-utility-button" type="button">Settings</button><button id="headerProfileButton" class="header-profile-button" type="button" aria-label="Account">M</button><div id="sharePopover" class="share-popover" hidden></div></div>
-    </header>
+  <div class="header-left">
+    <button id="headerBackButton" class="header-icon-button" type="button" aria-label="Back" hidden>&#8249;</button>
+    <button class="brand-link" id="brandButton" type="button" aria-label="Refresh BlueMind Docs workspace">
+      <img class="brand-logo" src="/assets/bluemind-docs-logo.png" alt="BlueMind Docs" />
+      <span class="brand-name">BlueMind Docs</span>
+    </button>
+  </div>
+  <input id="headerNotebookTitle" class="header-notebook-title" type="text" aria-label="Notebook title" hidden />
+  <div class="header-actions">
+    <button id="headerShareButton" class="header-icon-button" aria-label="Share" title="Share" hidden>&#8599;</button>
+    <button id="headerFocusButton" class="header-icon-button" aria-label="Focus Mode" title="Focus Mode" hidden>&#9974;</button>
+    <button id="headerActionButton" class="primary-button">Start</button>
+    <button id="headerDarkModeButton" class="header-utility-button" type="button">Dark Mode</button>
+    <button id="headerSettingsButton" class="header-utility-button" type="button">Settings</button>
+    <button id="headerProfileButton" class="header-profile-button" type="button" aria-label="Account">M</button>
+    <div id="sharePopover" class="share-popover" hidden></div>
+  </div>
+</header>
 
     <main id="appRoot" class="app-root"></main>
 

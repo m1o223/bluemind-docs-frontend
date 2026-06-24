@@ -1066,3 +1066,311 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   .workspace-page { width: min(100% - 64px, 1040px); }
   .folder-workspace { padding: 44px; }
 }
+
+/* Premium notebook editor direction */
+.global-header {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 420px) minmax(360px, 1fr);
+  align-items: center;
+}
+
+.header-left,
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-actions { justify-content: flex-end; }
+
+.header-icon-button {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid #EAEAEA;
+  border-radius: 12px;
+  background: #FFFFFF;
+  color: var(--primary);
+  font-size: 22px;
+  line-height: 1;
+  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.header-icon-button:hover {
+  transform: translateY(-1px);
+  border-color: #D6D6D6;
+  background: #F5FEFF;
+}
+
+.header-notebook-title {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  text-align: center;
+  font-size: 20px;
+  font-weight: 850;
+  padding: 0 14px;
+}
+
+.header-notebook-title:focus {
+  outline: none;
+  border-color: #EAEAEA;
+  background: #FFFFFF;
+}
+
+.editor-layout {
+  grid-template-columns: 276px minmax(720px, 1fr) 312px;
+}
+
+.notebook-left-panel .section-head {
+  margin-bottom: 14px;
+}
+
+.icon-tool,
+.template-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  border: 1px solid #EAEAEA;
+  border-radius: 14px;
+  background: #FFFFFF;
+  color: var(--text);
+  padding: 0 14px;
+  font-weight: 780;
+  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.icon-tool:hover,
+.template-button:hover {
+  transform: translateY(-1px);
+  border-color: #D6D6D6;
+  background: #F5FEFF;
+}
+
+.icon-tool svg,
+.template-button svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+.template-button {
+  width: 100%;
+  margin-bottom: 8px;
+  color: var(--secondary);
+}
+
+.notebook-editor-shell {
+  min-height: calc(100vh - var(--header-height));
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+}
+
+.notebook-stage-top {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 34px;
+  border-bottom: 1px solid #EAEAEA;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.notebook-count {
+  color: var(--secondary);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.notebook-stage {
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 18px;
+  padding: 34px 28px 48px;
+  overflow: auto;
+}
+
+.notebook-page {
+  position: relative;
+  justify-self: center;
+  flex: 0 0 auto;
+  border: 1px solid #EAEAEA;
+  border-radius: 24px;
+  background: #FFFFFF;
+  box-shadow: 0 26px 70px rgba(14, 47, 118, 0.08);
+  overflow: hidden;
+  transition: transform 0.28s ease, box-shadow 0.28s ease;
+}
+
+.notebook-page::before {
+  content: "";
+  position: absolute;
+  inset: 28px;
+  pointer-events: none;
+  border-radius: 18px;
+  background-image: linear-gradient(#F3F6FA 1px, transparent 1px);
+  background-size: 100% 34px;
+  opacity: 0.42;
+}
+
+.page-nav-button {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #EAEAEA;
+  border-radius: 50%;
+  background: #FFFFFF;
+  color: var(--primary);
+  font-size: 34px;
+  line-height: 1;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.page-nav-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(14, 47, 118, 0.08);
+}
+
+.page-nav-button:disabled {
+  opacity: 0.35;
+}
+
+.blank-notebook-prompt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 220px;
+  min-height: 120px;
+  border: 1px dashed #D6D6D6;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--secondary);
+  font-weight: 800;
+}
+
+.canvas-object {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  padding: 10px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.canvas-object:hover,
+.canvas-object.selected {
+  border-color: #90CAF9;
+  box-shadow: 0 14px 34px rgba(14, 47, 118, 0.08);
+}
+
+.object-grip {
+  position: absolute;
+  left: -12px;
+  top: -12px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid #EAEAEA;
+  border-radius: 50%;
+  background: #FFFFFF;
+  cursor: grab;
+  box-shadow: 0 8px 18px rgba(14, 47, 118, 0.08);
+}
+
+.object-grip::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  display: block;
+  margin: 7px auto;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.resize-handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #FFFFFF;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: nwse-resize;
+}
+
+.canvas-text-shell,
+.canvas-text-shell input,
+.canvas-text-shell textarea {
+  width: 100%;
+  height: 100%;
+}
+
+.canvas-text-shell input,
+.canvas-text-shell textarea {
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  text-align: inherit;
+  font: inherit;
+  font-weight: inherit;
+  font-style: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  padding: 0;
+}
+
+.canvas-text-shell input:focus,
+.canvas-text-shell textarea:focus {
+  outline: none;
+}
+
+.image-object img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.panel-empty-title {
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.panel-help {
+  margin: 0;
+  color: var(--secondary);
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.focus-mode .editor-layout {
+  grid-template-columns: 1fr;
+}
+
+.focus-mode .notebook-stage {
+  grid-template-columns: 72px minmax(0, 1fr) 72px;
+}
+
+@media (max-width: 1280px) {
+  .editor-layout { grid-template-columns: 248px minmax(640px, 1fr) 280px; }
+  .notebook-stage { gap: 12px; padding-left: 18px; padding-right: 18px; }
+}
